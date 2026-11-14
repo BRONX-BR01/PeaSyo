@@ -11,6 +11,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
+import com.peasyo.MacroKeys;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -606,6 +607,9 @@ public class StreamView extends FrameLayout {
     // 处理实体按键事件
     public boolean handleKeyEvent(KeyEvent event) {
 //        Log.d(TAG, "handleKeyEvent:" +  event);
+        if (MacroKeys.handle(reactContext, event)) {
+            return true;
+        }
         if(event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getDeviceId() == -1) {
             return false;
         }

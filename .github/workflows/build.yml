@@ -1,0 +1,66 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [macro]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable corepack (yarn 4)
+        run: corepack enable
+
+      - name: Install JS dependencies
+        run: yarn install
+
+      - name: Accept Android licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+
+      - name: Align and sign
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          set -e
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "APK gerado: $APK"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          mkdir -p out
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > ks.jks
+            PASS="$KEYSTORE_PASS"
+          else
+            PASS=android123
+            keytool -genkeypair -keystore ks.jks -alias macro -keyalg RSA -keysize 2048 \
+              -validity 10000 -storepass "$PASS" -keypass "$PASS" -dname "CN=macro"
+          fi
+          "$BT/zipalign" -f -p 4 "$APK" out/aligned.apk
+          "$BT/apksigner" sign --ks ks.jks --ks-key-alias macro \
+            --ks-pass "pass:$PASS" --key-pass "pass:$PASS" \
+            --out out/PeaSyo-macro.apk out/aligned.apk
+          rm out/aligned.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PeaSyo-macro-apk
+          path: out/PeaSyo-macro.apk

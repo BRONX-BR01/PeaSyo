@@ -28,6 +28,7 @@ import StreamTextureView from '../components/StreamTextureView';
 import StreamFsrView from '../components/StreamFsrView';
 import {CONTROLLERS} from '../common/controller';
 import VirtualGamepad from '../components/VirtualGamepad';
+import MacroOverlay from '../components/MacroOverlay';
 import CustomVirtualGamepad from '../components/CustomVirtualGamepad';
 import Touchpad from '../components/Touchpad';
 import PerfPanel from '../components/PerfPanel';
@@ -1310,6 +1311,13 @@ function StreamScreen({navigation, route}) {
       )}
 
       {loading && <Spinner text={loadingText} />}
+
+      {!loading && (
+        <MacroOverlay
+          onPressButton={handlePressButton}
+          onPressTrigger={handleTrigger}
+        />
+      )}
 
       {showPerformance && (
         <PerfPanel

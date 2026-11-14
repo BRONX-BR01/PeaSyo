@@ -183,6 +183,16 @@ public class GamepadManager extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void setMacroTriggerKey(int keyCode) {
+        MacroKeys.triggerKey = keyCode;
+    }
+
+    @ReactMethod
+    public void setMacroCapture(boolean capture) {
+        MacroKeys.capturing = capture;
+    }
+
+    @ReactMethod
     public void setCurrentScreen(String value) {
         currentScreen = value;
     }
