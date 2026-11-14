@@ -21,10 +21,18 @@ import {
   loadMacro,
   saveMacro,
 } from '../common/macro';
+import {
+  DEFAULT_STICK,
+  PUSH_DIRS,
+  STICK_MODES,
+  StickConfig,
+  StickRunner,
+} from '../common/macroStick';
 
 type Props = {
   onPressButton: (buttonMask: number, isPressed: boolean) => void;
   onPressTrigger: (name: string, value: number) => void;
+  onMoveStick: (name: string, x: number, y: number) => void;
 };
 
 const BUBBLE = 44;
@@ -59,7 +67,7 @@ const Stepper = ({
   </View>
 );
 
-const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
+const MacroOverlay = ({onPressButton, onPressTrigger, onMoveStick}: Props) => {
   const {width, height} = useWindowDimensions();
   const [cfg, setCfg] = React.useState<MacroConfig>(() => loadMacro());
   const cfgRef = React.useRef(cfg);
@@ -67,10 +75,13 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
   const [open, setOpen] = React.useState(false);
   const [running, setRunning] = React.useState(false);
   const [capturing, setCapturing] = React.useState(false);
+  const [stick, setStick] = React.useState<StickConfig>(DEFAULT_STICK);
+  const stickRef = React.useRef(stick);
+  const [stickRunning, setStickRunning] = React.useState(false);
 
   const heldRef = React.useRef(false);
-  const propsRef = React.useRef({onPressButton, onPressTrigger});
-  propsRef.current = {onPressButton, onPressTrigger};
+  const propsRef = React.useRef({onPressButton, onPressTrigger, onMoveStick});
+  propsRef.current = {onPressButton, onPressTrigger, onMoveStick};
   const winRef = React.useRef({width, height});
   winRef.current = {width, height};
 
@@ -97,6 +108,34 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
     );
   }
   const runner = runnerRef.current;
+
+  // Analógico (girar sem parar / segurar direção), independente da sequência
+  const stickRunnerRef = React.useRef<StickRunner | null>(null);
+  if (!stickRunnerRef.current) {
+    stickRunnerRef.current = new StickRunner(
+      (name, x, y) => propsRef.current.onMoveStick(name, x, y),
+      (r: boolean) => setStickRunning(r),
+    );
+  }
+  const stickRunner = stickRunnerRef.current;
+
+  const updateStick = React.useCallback(
+    (patch: Partial<StickConfig>) => {
+      const next = {...stickRef.current, ...patch};
+      stickRef.current = next;
+      setStick(next);
+      stickRunner.update(next);
+    },
+    [stickRunner],
+  );
+
+  const toggleStick = React.useCallback(() => {
+    if (stickRunner.isRunning()) {
+      stickRunner.stop();
+    } else {
+      stickRunner.start(stickRef.current);
+    }
+  }, [stickRunner]);
 
   const triggerDown = React.useCallback(() => {
     const c = cfgRef.current;
@@ -134,10 +173,11 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
   React.useEffect(() => {
     return () => {
       runner.stop();
+      stickRunner.stop();
       gm?.setMacroTriggerKey?.(0);
       gm?.setMacroCapture?.(false);
     };
-  }, [gm, runner]);
+  }, [gm, runner, stickRunner]);
 
   // Bolinha arrastável
   const dragStart = React.useRef({x: 0, y: 0});
@@ -207,6 +247,10 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
 
   const bubbleColor = !cfg.enabled ? '#5a5a5a' : running ? '#28a046' : '#2864c8';
   const showRun = cfg.enabled && cfg.steps.length > 0;
+  const stickTop = Math.min(
+    pos.y + BUBBLE + 6 + (showRun ? BUBBLE - 8 + 6 : 0),
+    height - 40,
+  );
 
   return (
     <>
@@ -234,6 +278,19 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
           <Text style={styles.bubbleText}>{running ? '■' : '▶'}</Text>
         </Pressable>
       )}
+
+      <Pressable
+        style={[
+          styles.runBtn,
+          {
+            left: pos.x + 4,
+            top: stickTop,
+            backgroundColor: stickRunning ? '#b03a3a' : '#8a4fd0',
+          },
+        ]}
+        onPress={toggleStick}>
+        <Text style={styles.bubbleText}>{stickRunning ? '■' : '↻'}</Text>
+      </Pressable>
 
       {open && (
         <View
@@ -354,6 +411,109 @@ const MacroOverlay = ({onPressButton, onPressTrigger}: Props) => {
               </Pressable>
               <Pressable style={styles.btn} onPress={() => runner.stop()}>
                 <Text style={styles.btnText}>Parar</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.title, {marginTop: 14}]}>Analógico</Text>
+            <Text style={styles.hint}>
+              Roda ao mesmo tempo da sequência de botões. O botão ↻ ao lado do
+              M liga e desliga.
+            </Text>
+            <View style={styles.row}>
+              <Pressable
+                style={styles.btn}
+                onPress={() =>
+                  updateStick({stick: stick.stick === 'left' ? 'right' : 'left'})
+                }>
+                <Text style={styles.btnText}>
+                  {stick.stick === 'left' ? 'Esquerdo' : 'Direito'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.btn}
+                onPress={() =>
+                  updateStick({mode: (stick.mode + 1) % STICK_MODES.length})
+                }>
+                <Text style={styles.btnText}>
+                  Modo: {STICK_MODES[stick.mode]}
+                </Text>
+              </Pressable>
+            </View>
+
+            {stick.mode === 0 ? (
+              <>
+                <View style={styles.row}>
+                  <Pressable
+                    style={styles.btn}
+                    onPress={() => updateStick({cw: !stick.cw})}>
+                    <Text style={styles.btnText}>
+                      Sentido: {stick.cw ? 'Horário' : 'Anti-horário'}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Stepper
+                  label="Voltas por seg"
+                  value={stick.speed.toFixed(1)}
+                  onMinus={() =>
+                    updateStick({
+                      speed: Math.max(0.2, Math.round((stick.speed - 0.1) * 10) / 10),
+                    })
+                  }
+                  onPlus={() =>
+                    updateStick({
+                      speed: Math.min(8, Math.round((stick.speed + 0.1) * 10) / 10),
+                    })
+                  }
+                />
+              </>
+            ) : (
+              <View style={styles.row}>
+                <Pressable
+                  style={styles.btn}
+                  onPress={() =>
+                    updateStick({dir: (stick.dir + 1) % PUSH_DIRS.length})
+                  }>
+                  <Text style={styles.btnText}>
+                    Direção: {PUSH_DIRS[stick.dir]}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            <Stepper
+              label="Força"
+              value={Math.round(stick.radius * 100) + '%'}
+              onMinus={() =>
+                updateStick({
+                  radius: Math.max(0.2, Math.round((stick.radius - 0.05) * 100) / 100),
+                })
+              }
+              onPlus={() =>
+                updateStick({
+                  radius: Math.min(1, Math.round((stick.radius + 0.05) * 100) / 100),
+                })
+              }
+            />
+            <View style={styles.row}>
+              <Pressable
+                style={[styles.btn, stick.invertY ? styles.btnOn : null]}
+                onPress={() => updateStick({invertY: !stick.invertY})}>
+                <Text style={styles.btnText}>
+                  Inverter vertical: {stick.invertY ? 'SIM' : 'NÃO'}
+                </Text>
+              </Pressable>
+            </View>
+            <View style={styles.row}>
+              <Pressable
+                style={[styles.btn, stickRunning ? styles.btnOn : null]}
+                onPress={toggleStick}>
+                <Text style={styles.btnText}>
+                  {stickRunning
+                    ? 'Parar analógico'
+                    : stick.mode === 0
+                    ? 'Iniciar giro'
+                    : 'Iniciar'}
+                </Text>
               </Pressable>
             </View>
           </ScrollView>

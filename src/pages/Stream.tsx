@@ -244,6 +244,13 @@ function StreamScreen({navigation, route}) {
     streamViewRef.current?.pressTrigger(name, value);
   };
 
+  const handleMacroStick = (name: string, x: number, y: number) => {
+    if (name === 'right') {
+      isRightstickMoving.current = Math.abs(x) > 0.1 || Math.abs(y) > 0.1;
+    }
+    handleMoveStick(name, x, y);
+  };
+
   const handleMoveStick = (name: string, x: number, y: number) => {
     streamViewRef.current?.moveStick(name, x, y);
   };
@@ -1316,6 +1323,7 @@ function StreamScreen({navigation, route}) {
         <MacroOverlay
           onPressButton={handlePressButton}
           onPressTrigger={handleTrigger}
+          onMoveStick={handleMacroStick}
         />
       )}
 
