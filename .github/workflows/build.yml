@@ -34,6 +34,8 @@ jobs:
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler python3-protobuf
+      - name: Create keystore
+        run: keytool -genkeypair -keystore android/app/peasyo-release-key.keystore -alias peasyo-key -keyalg RSA -keysize 2048 -validity 10000 -storepass 920712 -keypass 920712 -dname "CN=PeaSyo"
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
